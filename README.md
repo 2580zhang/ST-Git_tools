@@ -16,8 +16,8 @@
 ### 一键安装
 
 ```bash
-git clone https://github.com/yourusername/ss-proxy-suite.git
-cd ss-proxy-suite
+git clone https://github.com/2580zhang/ST-Git_tools.git
+cd ST-Git_tools
 chmod +x install.sh
 sudo ./install.sh
 ```
@@ -154,4 +154,3 @@ ss-proxy-suite/
 ## License
 
 MIT
->>>>>>> 746821f (Initial commit: SS-Proxy-Suite)
