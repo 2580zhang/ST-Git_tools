@@ -39,7 +39,7 @@ echo ""
 echo -e "${YELLOW}[2/8] 安装 MTProto Proxy (TG代理)...${NC}"
 if [ ! -f "/usr/local/bin/mtproto-proxy" ]; then
     cd /tmp
-    git clone -b stable https://github.com/TelegramMessenger/MTProxy.git
+    git clone https://github.com/TelegramMessenger/MTProxy.git
     cd MTProxy
     make -j$(nproc)
     cp objs/bin/mtproto-proxy /usr/local/bin/
