@@ -8,6 +8,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,7 +33,7 @@ fi
 
 echo -e "${YELLOW}[1/8] 更新系统并安装依赖...${NC}"
 apt-get update -qq
-apt-get install -y -qq git python3 python3-pip python3-venv shadowsocks-libev iptables curl wget build-essential libssl-dev zlib1g-dev
+apt-get install -y -qq git python3 python3-pip python3-venv shadowsocks-libev iptables curl wget build-essential libssl-dev zlib1g-dev jq
 echo -e "${GREEN}✓ 基础依赖安装完成${NC}"
 
 echo ""
@@ -69,7 +70,8 @@ echo -e "${GREEN}✓ 项目文件部署完成${NC}"
 echo ""
 echo -e "${YELLOW}[4/8] 配置 Shadowsocks...${NC}"
 SS_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | head -c 16)
-cat > /etc/shadowsocks-libev/config.json <<EOF
+mkdir -p /root
+cat > /root/ss-config.json <<EOF
 {
     "server":"0.0.0.0",
     "server_port":$SS_PORT,
@@ -83,17 +85,18 @@ echo -e "${GREEN}✓ Shadowsocks 配置完成${NC}"
 echo ""
 echo -e "${YELLOW}[5/8] 配置 MTProto Proxy...${NC}"
 TG_SECRET=$(openssl rand -hex 16)
-echo "$TG_SECRET" > "$INSTALL_DIR/mtproto/proxy-secret"
+mkdir -p /root/mtproto
+echo "$TG_SECRET" > /root/mtproto/proxy-secret
 
-cat > "$INSTALL_DIR/mtproto/proxy-multi.conf" <<'EOF'
+cat > /root/mtproto/proxy-multi.conf <<'EOF'
 secret = "REPLACE_WITH_SECRET";
 port = 443;
 nat-info = "REPLACE_WITH_IP:443";
 mtproto = true;
 EOF
 
-sed -i "s/REPLACE_WITH_SECRET/$TG_SECRET/g" "$INSTALL_DIR/mtproto/proxy-multi.conf"
-sed -i "s/REPLACE_WITH_IP/$SERVER_IP/g" "$INSTALL_DIR/mtproto/proxy-multi.conf"
+sed -i "s/REPLACE_WITH_SECRET/$TG_SECRET/g" /root/mtproto/proxy-multi.conf
+sed -i "s/REPLACE_WITH_IP/$SERVER_IP/g" /root/mtproto/proxy-multi.conf
 echo -e "${GREEN}✓ MTProto Proxy 配置完成${NC}"
 
 echo ""
@@ -134,10 +137,10 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/mtproto-proxy -u nobody -p 8888 -H $TG_PORT -S $TG_SECRET --aes-pwd $INSTALL_DIR/mtproto/proxy-secret --nat-info $SERVER_IP:$TG_PORT $INSTALL_DIR/mtproto/proxy-multi.conf
+ExecStart=/usr/local/bin/mtproto-proxy -u nobody -p 8888 -H $TG_PORT -S $TG_SECRET --aes-pwd /root/mtproto/proxy-secret --nat-info $SERVER_IP:$TG_PORT /root/mtproto/proxy-multi.conf
 Restart=always
 RestartSec=5
-WorkingDirectory=$INSTALL_DIR/mtproto
+WorkingDirectory=/root/mtproto
 
 [Install]
 WantedBy=multi-user.target
