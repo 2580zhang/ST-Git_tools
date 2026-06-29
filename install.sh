@@ -17,6 +17,10 @@ WEB_PORT=9090
 SS_PORT=18388
 TG_PORT=443
 
+LOG_FILE="/var/log/ss-proxy-install.log"
+mkdir -p /var/log
+exec > >(tee -a "$LOG_FILE") 2>&1
+
 SERVER_IP=$(curl -s 4.ipw.cn 2>/dev/null || curl -s ipinfo.io/ip 2>/dev/null || echo "127.0.0.1")
 
 echo -e "${BLUE}╔══════════════════════════════════════════════════╗${NC}"
@@ -24,6 +28,7 @@ echo -e "${BLUE}║     SS-Proxy-Suite 一键安装脚本                   ║$
 echo -e "${BLUE}║     Shadowsocks + TG代理 + Web管理 + GitHub加速   ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 开始安装..."
 
 # 检查root权限
 if [ "$EUID" -ne 0 ]; then 
@@ -32,16 +37,20 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 echo -e "${YELLOW}[1/8] 更新系统并安装依赖...${NC}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 更新系统..."
 apt-get update -qq
-apt-get install -y -qq git python3 python3-pip python3-venv shadowsocks-libev iptables curl wget build-essential libssl-dev zlib1g-dev jq
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 安装依赖..."
+apt-get install -y -qq git python3 python3-pip python3-venv shadowsocks-libev iptables curl wget build-essential libssl-dev zlib1g-dev jq net-tools
 echo -e "${GREEN}✓ 基础依赖安装完成${NC}"
 
 echo ""
 echo -e "${YELLOW}[2/8] 安装 MTProto Proxy (TG代理)...${NC}"
 if [ ! -f "/usr/local/bin/mtproto-proxy" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 克隆 MTProxy 源码..."
     cd /tmp
     git clone https://github.com/TelegramMessenger/MTProxy.git
     cd MTProxy
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 编译 MTProxy..."
     make -j$(nproc)
     cp objs/bin/mtproto-proxy /usr/local/bin/
     cd /tmp && rm -rf MTProxy
@@ -52,14 +61,18 @@ fi
 
 echo ""
 echo -e "${YELLOW}[3/8] 部署项目文件...${NC}"
-mkdir -p "$INSTALL_DIR"/{web-manager,bin,mtproto,data}
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 创建目录结构..."
+mkdir -p "$INSTALL_DIR"/{web-manager,bin,mtproto,data,logs}
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 复制文件..."
 cp "$SCRIPT_DIR"/web-manager/app.py "$INSTALL_DIR/web-manager/"
 cp "$SCRIPT_DIR"/bin/ss-manager-cli "$INSTALL_DIR/bin/"
 cp "$SCRIPT_DIR"/mtproto/* "$INSTALL_DIR/mtproto/" 2>/dev/null || true
 
 # 创建虚拟环境
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 创建 Python 虚拟环境..."
 python3 -m venv "$INSTALL_DIR/venv"
 source "$INSTALL_DIR/venv/bin/activate"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 安装 Python 依赖..."
 pip install -q flask waitress markdown requests
 deactivate
 
@@ -69,9 +82,19 @@ echo -e "${GREEN}✓ 项目文件部署完成${NC}"
 
 echo ""
 echo -e "${YELLOW}[4/8] 配置 Shadowsocks...${NC}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 生成 SS 配置..."
 SS_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | head -c 16)
 mkdir -p /root
 cat > /root/ss-config.json <<EOF
+{
+    "server":"0.0.0.0",
+    "server_port":$SS_PORT,
+    "password":"$SS_PASSWORD",
+    "method":"aes-256-gcm",
+    "timeout":300
+}
+EOF
+cat > /etc/shadowsocks-libev/config.json <<EOF
 {
     "server":"0.0.0.0",
     "server_port":$SS_PORT,
@@ -84,9 +107,12 @@ echo -e "${GREEN}✓ Shadowsocks 配置完成${NC}"
 
 echo ""
 echo -e "${YELLOW}[5/8] 配置 MTProto Proxy...${NC}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 生成 TG 配置..."
 TG_SECRET=$(openssl rand -hex 16)
 mkdir -p /root/mtproto
 echo "$TG_SECRET" > /root/mtproto/proxy-secret
+echo "$TG_PORT" > /root/mtproto/tg-port.conf
+echo "$TG_SECRET" > /root/mtproto/tg-secret.conf
 
 cat > /root/mtproto/proxy-multi.conf <<'EOF'
 secret = "REPLACE_WITH_SECRET";
@@ -101,17 +127,20 @@ echo -e "${GREEN}✓ MTProto Proxy 配置完成${NC}"
 
 echo ""
 echo -e "${YELLOW}[6/8] 配置 Web 管理面板...${NC}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 生成 Web 配置..."
 cat > "$INSTALL_DIR/web-manager/config.env" <<EOF
 GITHUB_TOKEN=
 WEB_PORT=$WEB_PORT
 SS_PORT=$SS_PORT
 TG_PORT=$TG_PORT
 SERVER_IP=$SERVER_IP
+SS_CLI_PATH=$INSTALL_DIR/bin/ss-manager-cli
 EOF
 echo -e "${GREEN}✓ Web 面板配置完成${NC}"
 
 echo ""
 echo -e "${YELLOW}[7/8] 安装 systemd 服务...${NC}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 创建 systemd 服务..."
 
 # Shadowsocks 服务
 cat > /etc/systemd/system/shadowsocks.service <<'EOF'
@@ -124,6 +153,8 @@ Type=simple
 ExecStart=/usr/bin/ss-server -c /etc/shadowsocks-libev/config.json
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -141,6 +172,8 @@ ExecStart=/usr/local/bin/mtproto-proxy -u nobody -p 8888 -H $TG_PORT -S $TG_SECR
 Restart=always
 RestartSec=5
 WorkingDirectory=/root/mtproto
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -159,6 +192,8 @@ ExecStart=$INSTALL_DIR/venv/bin/python $INSTALL_DIR/web-manager/app.py
 Restart=always
 RestartSec=5
 WorkingDirectory=$INSTALL_DIR/web-manager
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -170,12 +205,15 @@ echo -e "${GREEN}✓ systemd 服务安装完成${NC}"
 
 echo ""
 echo -e "${YELLOW}[8/8] 配置防火墙和 IP 转发...${NC}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 配置网络..."
 # 开启 IP 转发
 echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
 sysctl -p >/dev/null 2>&1
 
 # iptables
 iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE 2>/dev/null || true
+iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE 2>/dev/null || true
+iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE 2>/dev/null || true
 iptables -A INPUT -p tcp --dport $SS_PORT -j ACCEPT 2>/dev/null || true
 iptables -A INPUT -p tcp --dport $TG_PORT -j ACCEPT 2>/dev/null || true
 iptables -A INPUT -p tcp --dport $WEB_PORT -j ACCEPT 2>/dev/null || true
@@ -211,12 +249,31 @@ echo ""
 echo -e "${YELLOW}管理命令:${NC}"
 echo -e "    ss-manager          # CLI 管理界面"
 echo -e "    systemctl status shadowsocks mtproto-proxy ss-web-manager"
+echo -e "    journalctl -u shadowsocks -f      # SS 日志"
+echo -e "    journalctl -u mtproto-proxy -f    # TG 日志"
+echo -e "    journalctl -u ss-web-manager -f   # Web 日志"
+echo -e "    cat /var/log/ss-proxy-install.log # 安装日志"
 echo ""
 echo -e "${YELLOW}提示: 配置 GitHub Token 可提升 API 限额到 5000次/小时${NC}"
 echo -e "      编辑 $INSTALL_DIR/web-manager/config.env 添加 GITHUB_TOKEN"
 echo ""
 
 echo -e "${GREEN}启动服务中...${NC}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 启动所有服务..."
 systemctl start shadowsocks mtproto-proxy ss-web-manager
-sleep 2
-echo -e "${GREEN}✓ 所有服务已启动${NC}"
+sleep 3
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 检查服务状态..."
+echo ""
+echo -e "${YELLOW}服务状态检查:${NC}"
+for svc in shadowsocks mtproto-proxy ss-web-manager; do
+    if systemctl is-active --quiet "$svc"; then
+        echo -e "  ${GREEN}✓ $svc 运行中${NC}"
+    else
+        echo -e "  ${RED}✗ $svc 未运行${NC}"
+        echo -e "    日志: journalctl -u $svc --no-pager -n 20"
+    fi
+done
+
+echo ""
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 安装完成"

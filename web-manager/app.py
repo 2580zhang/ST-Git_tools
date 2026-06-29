@@ -7,7 +7,7 @@ from flask import Flask, jsonify, request, render_template_string, Response, str
 import markdown as md_lib
 
 app = Flask(__name__)
-CLI = "/opt/ss-proxy-suite/bin/ss-manager-cli"
+CLI = os.environ.get("SS_CLI_PATH", "/opt/ss-proxy-suite/bin/ss-manager-cli")
 
 # GitHub Token 认证（提高 API 限制从 60/小时 到 5000/小时）
 # 可在 https://github.com/settings/tokens 创建 Personal Access Token
@@ -185,6 +185,27 @@ def format_traffic(bytes):
         return f"{bytes / (1024 * 1024):.1f} MB"
     else:
         return f"{bytes / (1024 * 1024 * 1024):.2f} GB"
+
+def get_service_log(service, lines=30):
+    """获取服务日志"""
+    try:
+        result = subprocess.run(
+            ["journalctl", "-u", service, "--no-pager", "-n", str(lines)],
+            capture_output=True, text=True, timeout=10
+        )
+        return result.stdout or result.stderr
+    except Exception:
+        return "无法获取日志"
+
+@app.route("/api/logs/<service>")
+def api_logs(service):
+    """获取服务日志"""
+    services = {"ss": "shadowsocks", "tg": "mtproto-proxy", "web": "ss-web-manager"}
+    if service not in services:
+        return jsonify({"ok": False, "msg": "无效服务"}), 400
+    lines = int(request.args.get("lines", 30))
+    log = get_service_log(services[service], lines)
+    return jsonify({"ok": True, "log": log})
 
 @app.route("/api/ss/<action>", methods=["POST"])
 def api_ss_action(action):
@@ -2128,9 +2149,9 @@ async function toggleSSLogs() {
     const el = document.getElementById('ssLogs');
     if (el.style.display === 'none') {
         try {
-            const r = await fetch('/api/ss/logs');
+            const r = await fetch('/api/logs/ss');
             const d = await r.json();
-            el.textContent = d.logs;
+            el.textContent = d.log || '无日志';
         } catch(e) {}
         el.style.display = 'block';
     } else {
@@ -2142,14 +2163,23 @@ async function toggleTGLogs() {
     const el = document.getElementById('tgLogs');
     if (el.style.display === 'none') {
         try {
-            const r = await fetch('/api/tg/logs');
+            const r = await fetch('/api/logs/tg');
             const d = await r.json();
-            el.textContent = d.logs;
+            el.textContent = d.log || '无日志';
         } catch(e) {}
         el.style.display = 'block';
     } else {
         el.style.display = 'none';
     }
+}
+
+async function loadWebLogs() {
+    const el = document.getElementById('webLogs');
+    try {
+        const r = await fetch('/api/logs/web');
+        const d = await r.json();
+        el.textContent = d.log || '无日志';
+    } catch(e) {}
 }
 
 refreshAll();
