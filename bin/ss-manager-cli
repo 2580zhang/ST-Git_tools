@@ -86,13 +86,41 @@ start_server() {
     fi
     echo -e "\n${YELLOW}正在启动服务...${NC}"
     mkdir -p "$(dirname "$PID_FILE")"
+    
+    if [ ! -f "/usr/bin/ss-server" ]; then
+        echo -e "${RED}✗ ss-server 未安装，请运行: apt-get install shadowsocks-libev${NC}"
+        return
+    fi
+    
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo -e "${RED}✗ 配置文件不存在: $CONFIG_FILE${NC}"
+        return
+    fi
+    
+    local test_out=$(ss-server -c "$CONFIG_FILE" -t 2>&1 | head -5)
+    if [ $? -ne 0 ] && echo "$test_out" | grep -q -E "(error|Error|ERROR|invalid|Invalid)"; then
+        echo -e "${RED}✗ 配置文件无效:${NC}"
+        echo "$test_out"
+        return
+    fi
+    
     nohup ss-server -c "$CONFIG_FILE" -f "$PID_FILE" > /tmp/ss-server.log 2>&1 &
     sleep 2
     if is_running; then
         echo -e "${GREEN}✓ 服务启动成功 (PID: $(cat "$PID_FILE"))${NC}"
     else
         echo -e "${RED}✗ 启动失败, 日志:${NC}"
-        tail -10 /tmp/ss-server.log 2>/dev/null || echo "无日志"
+        if [ -f "/tmp/ss-server.log" ]; then
+            tail -20 /tmp/ss-server.log
+        else
+            echo "日志文件不存在"
+        fi
+        echo ""
+        echo -e "${YELLOW}诊断信息:${NC}"
+        echo "  配置文件: $CONFIG_FILE"
+        echo "  PID文件: $PID_FILE"
+        echo "  ss-server路径: $(which ss-server 2>/dev/null || echo "未找到")"
+        echo "  端口占用: $(netstat -tlnp 2>/dev/null | grep $(get_port) || echo "未占用")"
     fi
 }
 
