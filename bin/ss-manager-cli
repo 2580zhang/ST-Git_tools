@@ -146,9 +146,18 @@ start_server() {
     
     local port=$(get_port)
     if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
-        echo -e "${RED}✗ 端口 ${port} 已被占用${NC}"
-        ss -tlnp 2>/dev/null | grep ":${port} "
-        return
+        echo -e "${YELLOW}端口 ${port} 已被占用，正在清理...${NC}"
+        local pids=$(ss -tlnp 2>/dev/null | grep ":${port} " | grep -oP 'pid=\K[0-9]+')
+        for pid in $pids; do
+            echo -e "${YELLOW}  杀死进程 $pid...${NC}"
+            kill -9 "$pid" 2>/dev/null
+        done
+        sleep 1
+    fi
+    if pgrep -f "ss-server" >/dev/null 2>&1; then
+        echo -e "${YELLOW}发现其他 ss-server 进程，正在清理...${NC}"
+        killall -9 ss-server 2>/dev/null || pkill -9 ss-server 2>/dev/null
+        sleep 1
     fi
     
     nohup ss-server -c "$CONFIG_FILE" -f "$PID_FILE" > /tmp/ss-server.log 2>&1 &

@@ -2222,5 +2222,19 @@ def index():
 
 if __name__ == "__main__":
     from waitress import serve
-    print(" * Running on http://0.0.0.0:9090/ (waitress)")
-    serve(app, host="0.0.0.0", port=9090, threads=8)
+    import socket
+    port = int(os.environ.get("WEB_PORT", 9090))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    result = sock.connect_ex(('0.0.0.0', port))
+    if result == 0:
+        print(f" * 端口 {port} 已被占用，尝试清理...")
+        try:
+            import subprocess
+            subprocess.run(["fuser", "-k", f"{port}/tcp"], capture_output=True)
+            time.sleep(1)
+        except:
+            pass
+    sock.close()
+    print(f" * Running on http://0.0.0.0:{port}/ (waitress)")
+    serve(app, host="0.0.0.0", port=port, threads=8)
