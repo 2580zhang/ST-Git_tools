@@ -1231,7 +1231,6 @@ GH_INDEX = r"""<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh}
-/* 顶部导航 */
 .navbar{background:#161b22;border-bottom:1px solid #30363d;padding:0 24px;display:flex;align-items:center;height:56px;gap:16px}
 .navbar .logo{color:#58a6ff;font-size:20px;font-weight:700;text-decoration:none;white-space:nowrap}
 .navbar .search-wrap{flex:1;max-width:500px;position:relative}
@@ -1241,7 +1240,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .navbar .nav-links{display:flex;gap:12px;margin-left:auto}
 .navbar .nav-links a{color:#c9d1d9;text-decoration:none;font-size:13px;padding:6px 10px;border-radius:6px;transition:all .2s}
 .navbar .nav-links a:hover{background:#30363d;color:#58a6ff}
-/* 主内容 */
 .main{max-width:960px;margin:0 auto;padding:32px 20px}
 .hero{text-align:center;padding:40px 0 20px}
 .hero h1{font-size:32px;color:#58a6ff;margin-bottom:8px}
@@ -1252,14 +1250,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .hero .search-box button{padding:12px 24px;background:#238636;border:none;border-radius:0 6px 6px 0;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
 .hero .search-box button:hover{background:#2ea043}
 .section-title{font-size:18px;font-weight:600;color:#c9d1d9;margin:32px 0 16px;padding-bottom:8px;border-bottom:1px solid #30363d}
-/* 快捷入口 */
 .quick-links{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
 .quick-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;text-decoration:none;transition:all .2s}
 .quick-card:hover{border-color:#58a6ff}
 .quick-card .name{color:#58a6ff;font-size:14px;font-weight:600;margin-bottom:4px}
 .quick-card .desc{color:#8b949e;font-size:12px;line-height:1.5}
 .quick-card .meta{display:flex;gap:12px;margin-top:8px;font-size:11px;color:#484f58}
-/* 组织列表 */
 .org-list{display:flex;flex-wrap:wrap;gap:8px}
 .org-link{display:inline-block;padding:6px 14px;background:#161b22;border:1px solid #30363d;border-radius:20px;color:#58a6ff;text-decoration:none;font-size:13px;transition:all .2s}
 .org-link:hover{border-color:#58a6ff;background:#1f2937}
@@ -1268,7 +1264,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .toast-success{background:#238636;color:#fff}
 .toast-error{background:#da3633;color:#fff}
 @keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
-@media(max-width:600px){.navbar{gap:8px}.navbar .nav-links a{font-size:11px;padding:4px 6px}.hero h1{font-size:24px}}
+/* 流量监控 */
+.traffic-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-top:20px}
+.traffic-card h3{font-size:14px;color:#58a6ff;margin-bottom:12px}
+.traffic-summary{display:flex;gap:16px}
+.traffic-item{flex:1;background:#0d1117;border-radius:6px;padding:12px;text-align:center}
+.traffic-label{font-size:12px;color:#8b949e;margin-bottom:4px}
+.traffic-value{font-size:20px;font-weight:700;color:#58a6ff}
+.traffic-interfaces{margin-top:12px}
+.iface-item{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:#0d1117;border-radius:4px;margin-bottom:4px;font-size:12px}
+.iface-name{color:#8b949e;font-weight:600}
+.iface-rx{color:#238636;margin-left:8px}
+.iface-tx{color:#f0883e;margin-left:8px}
+@media(max-width:600px){.navbar{gap:8px}.navbar .nav-links a{font-size:11px;padding:4px 6px}.hero h1{font-size:24px}.traffic-summary{flex-direction:column}}
 </style>
 </head>
 <body>
@@ -1340,6 +1348,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             <div class="desc">/gh?url=https://github.com/owner</div>
         </a>
     </div>
+
+    <div class="section-title">📊 服务器流量监控</div>
+    <div class="traffic-card">
+        <div class="traffic-summary">
+            <div class="traffic-item">
+                <div class="traffic-label">📥 入站流量</div>
+                <div class="traffic-value" id="trafficRX">--</div>
+            </div>
+            <div class="traffic-item">
+                <div class="traffic-label">📤 出站流量</div>
+                <div class="traffic-value" id="trafficTX">--</div>
+            </div>
+        </div>
+        <div class="traffic-interfaces" id="trafficInterfaces"></div>
+    </div>
 </div>
 <div id="toast" class="toast"></div>
 <script>
@@ -1349,6 +1372,11 @@ function doSearch(){
     q=q.trim();if(!q){toast('请输入搜索关键词','error');return}
     window.location.href='/gh/search?q='+encodeURIComponent(q);
 }
+function formatBytes(b){if(b<1024)return b+' B';if(b<1024*1024)return(b/1024).toFixed(1)+' KB';if(b<1024*1024*1024)return(b/(1024*1024)).toFixed(1)+' MB';return(b/(1024*1024*1024)).toFixed(2)+' GB'}
+async function loadTraffic(){
+    try{var r=await fetch('/api/status');var d=await r.json();var t=d.traffic;if(!t||Object.keys(t).length===0){document.getElementById('trafficRX').textContent='--';document.getElementById('trafficTX').textContent='--';document.getElementById('trafficInterfaces').innerHTML='';return}document.getElementById('trafficRX').textContent=t.formatted_rx||'--';document.getElementById('trafficTX').textContent=t.formatted_tx||'--';var html='';for(var[iface,data]of Object.entries(t.interfaces)){html+='<div class="iface-item"><span class="iface-name">'+iface+'</span><span class="iface-rx">📥 '+formatBytes(data.rx)+'</span><span class="iface-tx">📤 '+formatBytes(data.tx)+'</span></div>'}document.getElementById('trafficInterfaces').innerHTML=html}catch(e){console.log('Traffic load error:',e)}}
+loadTraffic();
+setInterval(loadTraffic,30000);
 </script>
 </body>
 </html>"""
