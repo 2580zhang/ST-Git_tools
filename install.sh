@@ -44,10 +44,39 @@ echo -e "${GREEN}✓ 基础依赖安装完成${NC}"
 
 echo ""
 echo -e "${YELLOW}[2/8] 安装 MTProto Proxy (TG代理)...${NC}"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 克隆 MTProxy 源码..."
 cd /tmp
 rm -rf MTProxy
-git clone https://github.com/TelegramMessenger/MTProxy.git
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 克隆 MTProxy 源码..."
+clone_success=0
+repos=(
+    "https://github.com/TelegramMessenger/MTProxy.git"
+)
+
+for repo in "${repos[@]}"; do
+    if git clone "$repo"; then
+        clone_success=1
+        break
+    fi
+    echo -e "${YELLOW}  尝试下一个源...${NC}"
+done
+
+if [ "$clone_success" -ne 1 ]; then
+    echo -e "${YELLOW}  尝试使用 GitHub IP 直连...${NC}"
+    if git clone https://140.82.113.4/TelegramMessenger/MTProxy.git; then
+        clone_success=1
+    fi
+fi
+
+if [ "$clone_success" -ne 1 ]; then
+    echo -e "${RED}✗ 无法克隆 MTProxy 源码，请检查网络连接${NC}"
+    echo -e "${YELLOW}  手动安装方法:${NC}"
+    echo -e "    cd /tmp && git clone https://github.com/TelegramMessenger/MTProxy.git"
+    echo -e "    cd MTProxy && sed -i 's/assert (!(p \& 0xffff0000));/\/\* disabled \*\//' common/pid.c"
+    echo -e "    make && cp objs/bin/mtproto-proxy /usr/local/bin/"
+    exit 1
+fi
+
 cd MTProxy
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 修复 PID 断言问题..."
