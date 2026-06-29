@@ -64,7 +64,16 @@ backup_config() {
 get_port()     { jq -r '.server_port' "$CONFIG_FILE"; }
 get_password() { jq -r '.password' "$CONFIG_FILE"; }
 get_method()   { jq -r '.method' "$CONFIG_FILE"; }
-get_server()   { jq -r '.server | join(", ")' "$CONFIG_FILE"; }
+get_server() { 
+    local s=$(jq -r '.server' "$CONFIG_FILE")
+    if [[ "$s" == "null" ]]; then
+        echo "0.0.0.0"
+    elif [[ "$s" == "["* ]]; then
+        jq -r '.server | join(", ")' "$CONFIG_FILE"
+    else
+        echo "$s"
+    fi
+}
 
 #=============================================================================
 # 核心功能
@@ -523,7 +532,9 @@ tg_is_running() {
 }
 
 tg_start() {
-    if [ ! -f "$TG_BIN" ]; then
+    if [ -f "/usr/local/bin/mtproto-proxy" ]; then
+        TG_BIN="/usr/local/bin/mtproto-proxy"
+    elif [ ! -f "$TG_BIN" ]; then
         echo -e "${RED}✗ MTProto 代理未安装 (${TG_BIN})${NC}"; return
     fi
     if [ ! -f "$TG_SECRET_FILE" ]; then
@@ -738,11 +749,13 @@ tg_menu() {
 
 tg_init() {
     echo -e "\n${BOLD}══════════ TG 代理初始化 ══════════${NC}"
-    if [ ! -f "$TG_BIN" ]; then
+    if [ -f "/usr/local/bin/mtproto-proxy" ]; then
+        TG_BIN="/usr/local/bin/mtproto-proxy"
+    elif [ ! -f "$TG_BIN" ]; then
         echo -e "${RED}✗ MTProto 代理未编译, 请先安装${NC}"
         echo -e "${YELLOW}手动编译:${NC}"
         echo -e "  cd /tmp && git clone https://github.com/TelegramMessenger/MTProxy.git"
-        echo -e "  cd MTProxy && make && mkdir -p /root/mtproto && cp objs/bin/mtproto-proxy /root/mtproto/"
+        echo -e "  cd MTProxy && make && cp objs/bin/mtproto-proxy /usr/local/bin/"
         return
     fi
     echo -ne "${CYAN}端口 [默认: 8443]: ${NC}"; read -r port; port=${port:-8443}
