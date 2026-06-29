@@ -44,29 +44,28 @@ echo -e "${GREEN}✓ 基础依赖安装完成${NC}"
 
 echo ""
 echo -e "${YELLOW}[2/8] 安装 MTProto Proxy (TG代理)...${NC}"
-if [ ! -f "/usr/local/bin/mtproto-proxy" ]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 克隆 MTProxy 源码..."
-    cd /tmp
-    rm -rf MTProxy
-    git clone https://github.com/TelegramMessenger/MTProxy.git
-    cd MTProxy
-    
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 编译 MTProxy..."
-    make -j$(nproc)
-    
-    if [ ! -f "objs/bin/mtproto-proxy" ]; then
-        echo -e "${RED}✗ MTProto Proxy 编译失败${NC}"
-        exit 1
-    fi
-    
-    cp objs/bin/mtproto-proxy /usr/local/bin/
-    chmod +x /usr/local/bin/mtproto-proxy
-    
-    cd /tmp && rm -rf MTProxy
-    echo -e "${GREEN}✓ MTProto Proxy 安装完成${NC}"
-else
-    echo -e "${GREEN}✓ MTProto Proxy 已安装${NC}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 克隆 MTProxy 源码..."
+cd /tmp
+rm -rf MTProxy
+git clone https://github.com/TelegramMessenger/MTProxy.git
+cd MTProxy
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 修复 PID 断言问题..."
+sed -i 's/assert (!(p \& 0xffff0000));/\/\* assert disabled for modern Linux kernels \*\//' common/pid.c
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 编译 MTProxy..."
+make -j$(nproc)
+
+if [ ! -f "objs/bin/mtproto-proxy" ]; then
+    echo -e "${RED}✗ MTProto Proxy 编译失败${NC}"
+    exit 1
 fi
+
+cp objs/bin/mtproto-proxy /usr/local/bin/
+chmod +x /usr/local/bin/mtproto-proxy
+
+cd /tmp && rm -rf MTProxy
+echo -e "${GREEN}✓ MTProto Proxy 安装完成${NC}"
 
 echo ""
 echo -e "${YELLOW}[3/8] 部署项目文件...${NC}"
