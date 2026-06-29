@@ -328,6 +328,10 @@ echo -e "      编辑 $INSTALL_DIR/web-manager/config.env 添加 GITHUB_TOKEN"
 echo ""
 
 echo -e "${GREEN}启动服务中...${NC}"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 停止旧服务..."
+systemctl stop shadowsocks mtproto-proxy ss-web-manager 2>/dev/null || true
+killall ss-server mtproto-proxy python3 2>/dev/null || true
+sleep 2
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 启动所有服务..."
 systemctl start shadowsocks mtproto-proxy ss-web-manager
 sleep 3
