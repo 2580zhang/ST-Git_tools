@@ -1,0 +1,16 @@
+[Unit]
+Description=SS Proxy Web Manager
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile={{INSTALL_DIR}}/web-manager/config.env
+ExecStart={{INSTALL_DIR}}/venv/bin/python {{INSTALL_DIR}}/web-manager/app.py
+Restart=always
+RestartSec=5
+WorkingDirectory={{INSTALL_DIR}}/web-manager
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

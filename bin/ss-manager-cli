@@ -576,10 +576,15 @@ tg_start() {
     fi
     local port=$(tg_get_port)
     local secret=$(tg_get_secret)
-    local internal_ip=$(ip -4 addr show eth0 2>/dev/null | grep -oP 'inet \K[\d.]+' || echo "10.0.12.3")
-    local nat_addr="${internal_ip}:${SERVER_IP}"
-    echo -e "\n${YELLOW}正在启动 TG 代理 (端口: ${port}, NAT: ${nat_addr})...${NC}"
-    nohup "$TG_BIN" -u root -p 8888 -H "$port" -S "$secret" --aes-pwd "$TG_SECRET_FILE" --nat-info "$nat_addr" --http-stats "$TG_CONF" -M 1 > /tmp/mtproto-proxy.log 2>&1 &
+    echo -e "\n${YELLOW}正在启动 TG 代理 (端口: ${port})...${NC}"
+    # 先检查端口是否被占用
+    if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+        echo -e "${RED}✗ 端口 ${port} 已被占用，请先停止其他进程${NC}"
+        ss -tlnp 2>/dev/null | grep ":${port} "
+        return
+    fi
+    # --nat-info 格式: <local-addr>:<global-addr> (使用服务器IP即可)
+    nohup "$TG_BIN" -u root -p 8888 -H "$port" -S "$secret" --aes-pwd "$TG_SECRET_FILE" --nat-info "${SERVER_IP}:${SERVER_IP}" --http-stats "$TG_CONF" -M 1 > /tmp/mtproto-proxy.log 2>&1 &
     echo $! > "$TG_PID"
     sleep 3
     if tg_is_running; then

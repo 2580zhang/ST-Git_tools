@@ -1,0 +1,14 @@
+[Unit]
+Description=Shadowsocks-libev Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ss-server -c /etc/shadowsocks-libev/config.json
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

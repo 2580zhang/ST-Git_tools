@@ -1,0 +1,15 @@
+[Unit]
+Description=MTProto Proxy Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mtproto-proxy -u nobody -p 8888 -H {{TG_PORT}} -S {{TG_SECRET}} --aes-pwd /etc/mtproto-proxy/proxy-secret --nat-info {{SERVER_IP}}:{{SERVER_IP}} --http-stats /etc/mtproto-proxy/proxy-multi.conf -M 1
+Restart=always
+RestartSec=5
+WorkingDirectory=/etc/mtproto-proxy
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
