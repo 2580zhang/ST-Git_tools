@@ -90,6 +90,11 @@ if [ ! -f "objs/bin/mtproto-proxy" ]; then
     exit 1
 fi
 
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 停止旧的 MTProto 服务..."
+systemctl stop mtproto-proxy 2>/dev/null || true
+killall mtproto-proxy 2>/dev/null || true
+sleep 2
+
 cp objs/bin/mtproto-proxy /usr/local/bin/
 chmod +x /usr/local/bin/mtproto-proxy
 
