@@ -613,7 +613,17 @@ tg_get_port() { cat "$TG_PORT_FILE" 2>/dev/null || echo "8443"; }
 tg_get_secret() { cat "$TG_SECRET_FILE_USER" 2>/dev/null; }
 
 tg_is_running() {
-    [ -f "$TG_PID" ] && kill -0 $(cat "$TG_PID") 2>/dev/null
+    if [ -f "$TG_PID" ] && kill -0 $(cat "$TG_PID") 2>/dev/null; then
+        return 0
+    fi
+    if pgrep -f "mtproto-proxy" >/dev/null 2>&1; then
+        return 0
+    fi
+    local port=$(tg_get_port 2>/dev/null || echo "")
+    if [ -n "$port" ] && ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+        return 0
+    fi
+    return 1
 }
 
 tg_start() {
@@ -634,11 +644,21 @@ tg_start() {
     local port=$(tg_get_port)
     local secret=$(tg_get_secret)
     echo -e "\n${YELLOW}正在启动 TG 代理 (端口: ${port})...${NC}"
-    # 先检查端口是否被占用
+    # 先检查端口是否被占用，如果被占用则杀死占用进程
     if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
-        echo -e "${RED}✗ 端口 ${port} 已被占用，请先停止其他进程${NC}"
-        ss -tlnp 2>/dev/null | grep ":${port} "
-        return
+        echo -e "${YELLOW}端口 ${port} 已被占用，正在清理...${NC}"
+        local pids=$(ss -tlnp 2>/dev/null | grep ":${port} " | grep -oP 'pid=\K[0-9]+')
+        for pid in $pids; do
+            echo -e "${YELLOW}  杀死进程 $pid...${NC}"
+            kill -9 "$pid" 2>/dev/null
+        done
+        sleep 1
+    fi
+    # 检查是否有其他mtproto-proxy进程在运行
+    if pgrep -f "mtproto-proxy" >/dev/null 2>&1; then
+        echo -e "${YELLOW}发现其他 mtproto-proxy 进程，正在清理...${NC}"
+        killall -9 mtproto-proxy 2>/dev/null || pkill -9 mtproto-proxy 2>/dev/null
+        sleep 1
     fi
     # --nat-info 格式: <local-addr>:<global-addr> (使用服务器IP即可)
     nohup "$TG_BIN" -u root -p 8888 -H "$port" -S "$secret" --aes-pwd "$TG_SECRET_FILE" --nat-info "${SERVER_IP}:${SERVER_IP}" --http-stats "$TG_CONF" -M 1 > /tmp/mtproto-proxy.log 2>&1 &
