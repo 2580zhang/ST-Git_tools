@@ -669,8 +669,15 @@ tg_start() {
         killall -9 mtproto-proxy 2>/dev/null || pkill -9 mtproto-proxy 2>/dev/null
         sleep 1
     fi
-    # --nat-info 格式: <local-addr>:<global-addr> (使用服务器IP即可)
-    nohup "$TG_BIN" -u root -p 8888 -H "$port" -S "$secret" --aes-pwd "$TG_SECRET_FILE" --nat-info "${SERVER_IP}:${SERVER_IP}" --http-stats "$TG_CONF" -M 1 > /tmp/mtproto-proxy.log 2>&1 &
+    # 检测内网IP和NAT环境
+    local local_ip=$(ip -4 addr show eth0 2>/dev/null | grep -oP 'inet \K[\d.]+' || ip -4 addr show ens3 2>/dev/null | grep -oP 'inet \K[\d.]+' || ip route get 1 2>/dev/null | grep -oP 'src \K[\d.]+')
+    local nat_info="${SERVER_IP}:${SERVER_IP}"
+    if [ -n "$local_ip" ] && [ "$local_ip" != "$SERVER_IP" ]; then
+        nat_info="${local_ip}:${SERVER_IP}"
+        echo -e "${YELLOW}检测到 NAT 环境: 内网 ${local_ip} → 外网 ${SERVER_IP}${NC}"
+    fi
+    # --nat-info 格式: <local-addr>:<global-addr>
+    nohup "$TG_BIN" -u root -p 8888 -H "$port" -S "$secret" --aes-pwd "$TG_SECRET_FILE" --nat-info "$nat_info" --http-stats "$TG_CONF" -M 1 > /tmp/mtproto-proxy.log 2>&1 &
     echo $! > "$TG_PID"
     sleep 3
     if tg_is_running; then
