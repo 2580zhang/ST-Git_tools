@@ -7,7 +7,7 @@ from flask import Flask, jsonify, request, render_template_string, Response, str
 import markdown as md_lib
 
 app = Flask(__name__)
-CLI = "/root/bin/ss-manager-cli"
+CLI = "/opt/ss-proxy-suite/bin/ss-manager-cli"
 
 # GitHub Token 认证（提高 API 限制从 60/小时 到 5000/小时）
 # 可在 https://github.com/settings/tokens 创建 Personal Access Token
@@ -129,12 +129,62 @@ def api_status():
     except:
         tg_stats = {}
 
+    # Server traffic stats
+    traffic = get_server_traffic()
+
     return jsonify({
         "ss": ss,
         "tg": tg,
         "tg_stats": tg_stats,
+        "traffic": traffic,
         "server_ip": ss.get("server", "未知")
     })
+
+def get_server_traffic():
+    """获取服务器网络流量统计"""
+    try:
+        with open("/proc/net/dev", "r") as f:
+            lines = f.readlines()
+
+        interfaces = {}
+        for line in lines[2:]:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            iface = parts[0].rstrip(":")
+            if iface in ["lo", "lo0"]:
+                continue
+            rx_bytes = int(parts[1])
+            tx_bytes = int(parts[9])
+            interfaces[iface] = {
+                "rx": rx_bytes,
+                "tx": tx_bytes
+            }
+
+        total_rx = sum(iface["rx"] for iface in interfaces.values())
+        total_tx = sum(iface["tx"] for iface in interfaces.values())
+
+        return {
+            "interfaces": interfaces,
+            "total_rx": total_rx,
+            "total_tx": total_tx,
+            "formatted_rx": format_traffic(total_rx),
+            "formatted_tx": format_traffic(total_tx)
+        }
+    except Exception:
+        return {}
+
+def format_traffic(bytes):
+    """格式化流量大小"""
+    if bytes < 1024:
+        return f"{bytes} B"
+    elif bytes < 1024 * 1024:
+        return f"{bytes / 1024:.1f} KB"
+    elif bytes < 1024 * 1024 * 1024:
+        return f"{bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{bytes / (1024 * 1024 * 1024):.2f} GB"
 
 @app.route("/api/ss/<action>", methods=["POST"])
 def api_ss_action(action):
@@ -1835,6 +1885,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .stat-item{background:#0f172a;border-radius:8px;padding:10px;text-align:center}
 .stat-item .num{font-size:20px;font-weight:700;color:#38bdf8}
 .stat-item .txt{font-size:11px;color:#94a3b8;margin-top:2px}
+.traffic-summary{display:flex;gap:16px;margin-bottom:12px}
+.traffic-item{flex:1;background:#0f172a;border-radius:8px;padding:12px;text-align:center}
+.traffic-label{font-size:12px;color:#94a3b8;margin-bottom:4px}
+.traffic-value{font-size:22px;font-weight:700;color:#38bdf8}
+.traffic-interfaces{margin-top:8px}
+.iface-item{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:#0f172a;border-radius:6px;margin-bottom:4px;font-size:13px}
+.iface-name{color:#94a3b8;font-weight:700}
+.iface-rx{color:#22c55e;margin-left:8px}
+.iface-tx{color:#f59e0b;margin-left:8px}
 .log-box{background:#0f172a;border-radius:8px;padding:12px;font-family:monospace;font-size:12px;max-height:200px;overflow-y:auto;white-space:pre-wrap;line-height:1.5;color:#94a3b8;margin-top:8px}
 .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
 .modal.show{display:flex}
@@ -1913,6 +1972,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
                 <div id="tgLogs" class="log-box" style="display:none"></div>
             </div>
         </div>
+
+        <!-- 流量监控卡片 -->
+        <div class="card">
+            <div class="card-header">
+                <h2>📊 服务器流量监控</h2>
+            </div>
+            <div class="card-body">
+                <div class="traffic-summary">
+                    <div class="traffic-item">
+                        <div class="traffic-label">📥 入站流量</div>
+                        <div class="traffic-value" id="trafficRX">--</div>
+                    </div>
+                    <div class="traffic-item">
+                        <div class="traffic-label">📤 出站流量</div>
+                        <div class="traffic-value" id="trafficTX">--</div>
+                    </div>
+                </div>
+                <div class="traffic-interfaces" id="trafficInterfaces"></div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1932,6 +2011,7 @@ async function refreshAll() {
         const d = await r.json();
         updateSS(d.ss);
         updateTG(d.tg, d.tg_stats);
+        updateTraffic(d.traffic);
         document.getElementById('refreshTime').textContent = new Date().toLocaleTimeString();
     } catch(e) {
         console.error(e);
@@ -1975,6 +2055,31 @@ function updateTG(t, stats) {
         });
         document.getElementById('tgStatsGrid').innerHTML = html;
     }
+}
+
+function updateTraffic(t) {
+    if (!t || Object.keys(t).length === 0) {
+        document.getElementById('trafficRX').textContent = '无法获取';
+        document.getElementById('trafficTX').textContent = '无法获取';
+        document.getElementById('trafficInterfaces').innerHTML = '';
+        return;
+    }
+
+    document.getElementById('trafficRX').textContent = t.formatted_rx || '--';
+    document.getElementById('trafficTX').textContent = t.formatted_tx || '--';
+
+    let html = '';
+    for (const [iface, data] of Object.entries(t.interfaces)) {
+        html += '<div class="iface-item"><span class="iface-name">' + iface + '</span><span class="iface-rx">📥 ' + formatBytes(data.rx) + '</span><span class="iface-tx">📤 ' + formatBytes(data.tx) + '</span></div>';
+    }
+    document.getElementById('trafficInterfaces').innerHTML = html;
+}
+
+function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 }
 
 async function ssAction(action) {
