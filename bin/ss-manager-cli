@@ -13,7 +13,29 @@ SERVICE_NAME="shadowsocks-libev"
 PID_FILE="/tmp/ss-server.pid"
 BACKUP_DIR="$CONFIG_DIR/backups"
 USERS_DIR="$CONFIG_DIR/users"
-SERVER_IP=$(curl -s --connect-timeout 3 ifconfig.me 2>/dev/null || curl -s --connect-timeout 3 ip.sb 2>/dev/null || echo "未知")
+
+get_server_ip() {
+    local ip=""
+    ip=$(curl -s --connect-timeout 3 ifconfig.me 2>/dev/null)
+    if [ -z "$ip" ]; then
+        ip=$(curl -s --connect-timeout 3 ip.sb 2>/dev/null)
+    fi
+    if [ -z "$ip" ]; then
+        ip=$(curl -s --connect-timeout 3 icanhazip.com 2>/dev/null)
+    fi
+    if [ -z "$ip" ]; then
+        ip=$(curl -s --connect-timeout 3 api.ipify.org 2>/dev/null)
+    fi
+    if [ -z "$ip" ]; then
+        ip=$(hostname -I | awk '{print $1}')
+    fi
+    if [ -z "$ip" ]; then
+        ip=$(ip addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -1)
+    fi
+    echo "${ip:-未知}"
+}
+
+SERVER_IP=$(get_server_ip)
 
 # TG 代理配置
 TG_BIN="/root/mtproto/mtproto-proxy"
@@ -183,11 +205,21 @@ show_status() {
     echo ""
 
     if is_running; then
-        local pid=$(cat "$PID_FILE")
+        local pid=""
+        if [ -f "$PID_FILE" ]; then
+            pid=$(cat "$PID_FILE")
+        else
+            pid=$(pgrep -f "ss-server" | head -1)
+        fi
         echo -e "${BOLD}══════════ 运行状态 ══════════${NC}"
         echo -e "${CYAN}进程 PID:${NC}  ${GREEN}${pid}${NC}"
-        echo -e "${CYAN}运行时间:${NC}  ${GREEN}$(ps -o etime= -p "$pid" 2>/dev/null || echo "未知")${NC}"
-        echo -e "${CYAN}内存占用:${NC}  ${GREEN}$(ps -o rss= -p "$pid" 2>/dev/null | awk '{printf "%.1f MB", $1/1024}' || echo "未知")${NC}"
+        if [ -n "$pid" ]; then
+            echo -e "${CYAN}运行时间:${NC}  ${GREEN}$(ps -o etime= -p "$pid" 2>/dev/null || echo "未知")${NC}"
+            echo -e "${CYAN}内存占用:${NC}  ${GREEN}$(ps -o rss= -p "$pid" 2>/dev/null | awk '{printf "%.1f MB", $1/1024}' || echo "未知")${NC}"
+        else
+            echo -e "${CYAN}运行时间:${NC}  ${GREEN}未知${NC}"
+            echo -e "${CYAN}内存占用:${NC}  ${GREEN}未知${NC}"
+        fi
     else
         echo -e "${BOLD}══════════ 运行状态 ══════════${NC}"
         echo -e "${RED}服务未运行${NC}"
