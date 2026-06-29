@@ -42,7 +42,17 @@ print_banner() {
 }
 
 is_running() {
-    [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null
+    if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
+        return 0
+    fi
+    if pgrep -f "ss-server" >/dev/null 2>&1; then
+        return 0
+    fi
+    local port=$(get_port 2>/dev/null || echo "")
+    if [ -n "$port" ] && ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+        return 0
+    fi
+    return 1
 }
 
 print_status_line() {
@@ -81,7 +91,15 @@ get_server() {
 
 start_server() {
     if is_running; then
-        echo -e "${YELLOW}服务已在运行中 (PID: $(cat "$PID_FILE"))${NC}"
+        echo -e "${YELLOW}服务已在运行中${NC}"
+        if [ -f "$PID_FILE" ]; then
+            echo -e "${YELLOW}(PID: $(cat "$PID_FILE"))${NC}"
+        else
+            local running_pid=$(pgrep -f "ss-server" | head -1)
+            if [ -n "$running_pid" ]; then
+                echo -e "${YELLOW}(PID: ${running_pid})${NC}"
+            fi
+        fi
         return
     fi
     echo -e "\n${YELLOW}正在启动服务...${NC}"
@@ -101,6 +119,13 @@ start_server() {
     if [ $? -ne 0 ] && echo "$test_out" | grep -q -E "(error|Error|ERROR|invalid|Invalid)"; then
         echo -e "${RED}✗ 配置文件无效:${NC}"
         echo "$test_out"
+        return
+    fi
+    
+    local port=$(get_port)
+    if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+        echo -e "${RED}✗ 端口 ${port} 已被占用${NC}"
+        ss -tlnp 2>/dev/null | grep ":${port} "
         return
     fi
     
